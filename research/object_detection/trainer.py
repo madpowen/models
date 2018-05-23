@@ -364,7 +364,7 @@ def train(create_tensor_dict_fn,
     # Soft placement allows placing on CPU ops without GPU implementation.
     session_config = tf.ConfigProto(allow_soft_placement=True,
                                     log_device_placement=False)
-
+    session_config.gpu_options.allow_growth=True
     # Save checkpoints regularly.
     keep_checkpoint_every_n_hours = train_config.keep_checkpoint_every_n_hours
     saver = tf.train.Saver(
@@ -397,6 +397,7 @@ def train(create_tensor_dict_fn,
     slim.learning.train(
         train_tensor,
         logdir=train_dir,
+        log_every_n_steps=1000,
         master=master,
         is_chief=is_chief,
         session_config=session_config,
