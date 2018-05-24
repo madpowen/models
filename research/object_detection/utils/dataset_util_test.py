@@ -47,6 +47,7 @@ class DatasetUtilTest(tf.test.TestCase):
     dataset = dataset_util.read_dataset(
         tf.data.TextLineDataset, decode_func, files, config)
     dataset = dataset.batch(batch_size)
+    dataset = dataset.prefetch(config.prefetch_size)
     return dataset.make_one_shot_iterator().get_next()
 
   def test_read_examples_list(self):
