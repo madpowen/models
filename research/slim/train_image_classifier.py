@@ -217,6 +217,26 @@ tf.app.flags.DEFINE_boolean(
     'ignore_missing_vars', False,
     'When restoring a checkpoint would ignore missing variables.')
 
+####
+#  #
+####
+
+tf.app.flags.DEFINE_integer(
+    'common_queue_capacity', 32 * 20, ''
+)
+
+tf.app.flags.DEFINE_integer(
+    'common_queue_min', 32 * 10, ''
+)
+
+tf.app.flags.DEFINE_boolean(
+    'preprocessing_fast_mode', True, ''
+)
+
+tf.app.flags.DEFINE_float(
+    'batch_norm_decay', None, ''
+)
+
 FLAGS = tf.app.flags.FLAGS
 
 
@@ -410,7 +430,8 @@ def main(_):
         FLAGS.model_name,
         num_classes=(dataset.num_classes - FLAGS.labels_offset),
         weight_decay=FLAGS.weight_decay,
-        is_training=True)
+        is_training=True,
+        batch_norm_decay=FLAGS.batch_norm_decay)
 
     #####################################
     # Select the preprocessing function #
@@ -427,14 +448,15 @@ def main(_):
       provider = slim.dataset_data_provider.DatasetDataProvider(
           dataset,
           num_readers=FLAGS.num_readers,
-          common_queue_capacity=20 * FLAGS.batch_size,
-          common_queue_min=10 * FLAGS.batch_size)
+          common_queue_capacity=FLAGS.common_queue_capacity,
+          common_queue_min=FLAGS.common_queue_min)
       [image, label] = provider.get(['image', 'label'])
       label -= FLAGS.labels_offset
 
       train_image_size = FLAGS.train_image_size or network_fn.default_image_size
 
-      image = image_preprocessing_fn(image, train_image_size, train_image_size)
+      image = image_preprocessing_fn(image, train_image_size, train_image_size,
+                                     fast_mode=FLAGS.preprocessing_fast_mode)
 
       images, labels = tf.train.batch(
           [image, label],
