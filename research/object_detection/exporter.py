@@ -26,6 +26,7 @@ from tensorflow.python.framework import graph_util
 from tensorflow.python.platform import gfile
 from tensorflow.python.saved_model import signature_constants
 from tensorflow.python.training import saver as saver_lib
+from object_detection.builders import graph_rewriter_builder
 from object_detection.builders import model_builder
 from object_detection.core import standard_fields as fields
 from object_detection.data_decoders import tf_example_decoder
@@ -452,12 +453,18 @@ def export_inference_graph(input_type,
   """
   detection_model = model_builder.build(pipeline_config.model,
                                         is_training=False)
+
+  graph_rewriter_fn = None
+  if pipeline_config.HasField('graph_rewriter'):
+    graph_rewriter_fn = graph_rewriter_builder.build(
+        pipeline_config.graph_rewriter, is_training=False)
+
   _export_inference_graph(input_type, detection_model,
                           pipeline_config.eval_config.use_moving_averages,
                           trained_checkpoint_prefix,
                           output_directory, additional_output_tensor_names,
                           input_shape, output_collection_name,
-                          graph_hook_fn=None)
+                          graph_hook_fn=graph_rewriter_fn)
   pipeline_config.eval_config.use_moving_averages = False
   config_text = text_format.MessageToString(pipeline_config)
   with tf.gfile.Open(
