@@ -28,6 +28,7 @@ import copy
 
 import tensorflow as tf
 
+from nets import mobilenet_v1
 from nets.mobilenet import conv_blocks as ops
 from nets.mobilenet import mobilenet as lib
 
@@ -183,6 +184,10 @@ def training_scope(**kwargs):
     An `arg_scope` to use for the mobilenet v2 model.
   """
   return lib.training_scope(**kwargs)
+
+
+mobilenet_v2_035 = mobilenet_v1.wrapped_partial(mobilenet,
+                                                depth_multiplier=0.35)
 
 
 __all__ = ['training_scope', 'mobilenet_base', 'mobilenet', 'V2_DEF']
