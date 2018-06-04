@@ -294,7 +294,7 @@ class ObjectDetectionEvaluator(DetectionEvaluator):
 
         # PR curve
         display_name = (
-            'PR_curve@{}'.format(category_index[idx + self._label_id_offset]['name']))
+            self._metric_prefix + 'PR_curve@{}'.format(category_index[idx + self._label_id_offset]['name']))
         pr_value[display_name] = {'precisions': precisions_per_class[idx], 'recalls': recalls_per_class[idx]}
 
         # Optionally add CorLoc metrics.classes
@@ -779,8 +779,8 @@ class ObjectDetectionEvaluation(object):
       if scores[i].shape[0] > 0:
         self.scores_per_class[i].append(scores[i])
         self.tp_fp_labels_per_class[i].append(tp_fp_labels[i])
-    (self.num_images_correctly_detected_per_class
-    ) += is_class_correctly_detected_in_image
+    self.num_images_correctly_detected_per_class += (
+        is_class_correctly_detected_in_image)
 
   def _update_ground_truth_statistics(self, groundtruth_class_labels,
                                       groundtruth_is_difficult_list,
@@ -835,8 +835,6 @@ class ObjectDetectionEvaluation(object):
       all_scores = np.array([], dtype=float)
       all_tp_fp_labels = np.array([], dtype=bool)
     for class_index in range(self.num_class):
-      if self.num_gt_instances_per_class[class_index] == 0:
-        continue
       if not self.scores_per_class[class_index]:
         scores = np.array([], dtype=float)
         tp_fp_labels = np.array([], dtype=float)
