@@ -191,7 +191,6 @@ def build(input_reader_config,
       dataset = dataset.apply(
           tf.contrib.data.padded_batch_and_drop_remainder(batch_size,
                                                           padding_shapes))
-    dataset = dataset.prefetch(input_reader_config.prefetch_size)
     return dataset
 
   raise ValueError('Unsupported input_reader_config.')

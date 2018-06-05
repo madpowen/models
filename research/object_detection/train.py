@@ -47,9 +47,12 @@ import os
 import tensorflow as tf
 
 from object_detection import trainer
+from object_detection.core import standard_fields as fields
+from object_detection.core import preprocessor
 from object_detection.builders import dataset_builder
 from object_detection.builders import graph_rewriter_builder
 from object_detection.builders import model_builder
+from object_detection.builders import preprocessor_builder
 from object_detection.utils import config_util
 from object_detection.utils import dataset_util
 
@@ -117,8 +120,38 @@ def main(_):
       is_training=True)
 
   def get_next(config):
+
+    def transform_input_data_fn(tensor_dict):
+      data_augmentation_options = [
+        preprocessor_builder.build(step)
+        for step in train_config.data_augmentation_options
+      ]
+      if not data_augmentation_options:
+        return tensor_dict
+
+      tensor_dict[fields.InputDataFields.image] = tf.expand_dims(
+          tf.to_float(tensor_dict[fields.InputDataFields.image]), 0)
+      include_instance_masks = (
+          fields.InputDataFields.groundtruth_instance_masks in tensor_dict)
+      include_keypoints = (fields.InputDataFields.groundtruth_keypoints
+                           in tensor_dict)
+      include_multiclass_scores = (fields.InputDataFields.multiclass_scores
+                                   in tensor_dict)
+      tensor_dict = preprocessor.preprocess(
+          tensor_dict, data_augmentation_options,
+          func_arg_map=preprocessor.get_default_func_arg_map(
+              include_multiclass_scores=include_multiclass_scores,
+              include_instance_masks=include_instance_masks,
+              include_keypoints=include_keypoints))
+      assert tensor_dict[fields.InputDataFields.image].shape[0] == 1
+      tensor_dict[fields.InputDataFields.image] = tf.squeeze(
+          tensor_dict[fields.InputDataFields.image], axis=0)
+      return tensor_dict
+
     return dataset_util.make_initializable_iterator(
-        dataset_builder.build(config)).get_next()
+        dataset_builder.build(
+            config, transform_input_data_fn=transform_input_data_fn)
+    )
 
   create_input_dict_fn = functools.partial(get_next, input_config)
 

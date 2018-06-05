@@ -24,9 +24,6 @@ import functools
 import tensorflow as tf
 
 from object_detection.builders import optimizer_builder
-from object_detection.builders import preprocessor_builder
-from object_detection.core import batcher
-from object_detection.core import preprocessor
 from object_detection.core import standard_fields as fields
 from object_detection.utils import ops as util_ops
 from object_detection.utils import variables_helper
@@ -37,7 +34,7 @@ slim = tf.contrib.slim
 
 def create_input_queue(batch_size_per_clone, create_tensor_dict_fn,
                        batch_queue_capacity, num_batch_queue_threads,
-                       prefetch_queue_capacity, data_augmentation_options):
+                       prefetch_queue_capacity):
   """Sets up reader, prefetcher and returns input queue.
 
   Args:
@@ -47,45 +44,49 @@ def create_input_queue(batch_size_per_clone, create_tensor_dict_fn,
     num_batch_queue_threads: number of threads to use for batching.
     prefetch_queue_capacity: maximum capacity of the queue used to prefetch
                              assembled batches.
-    data_augmentation_options: a list of tuples, where each tuple contains a
-      data augmentation function and a dictionary containing arguments and their
-      values (see preprocessor.py).
 
   Returns:
     input queue: a batcher.BatchQueue object holding enqueued tensor_dicts
       (which hold images, boxes and targets).  To get a batch of tensor_dicts,
       call input_queue.Dequeue().
   """
-  tensor_dict = create_tensor_dict_fn()
+  _ = batch_queue_capacity
+  tensor_dict_iterator = create_tensor_dict_fn()
 
-  tensor_dict[fields.InputDataFields.image] = tf.expand_dims(
-      tensor_dict[fields.InputDataFields.image], 0)
+  class BatchQueue(object):
 
-  images = tensor_dict[fields.InputDataFields.image]
-  float_images = tf.to_float(images)
-  tensor_dict[fields.InputDataFields.image] = float_images
+    def __init__(self, dataset_iterator, batch_size):
+      batch_tensor_dict = []
+      for _ in range(batch_size):
+        tensor_dict = dataset_iterator.get_next()
+        tensor_dict[fields.InputDataFields.image] = tf.expand_dims(
+            tf.to_float(tensor_dict[fields.InputDataFields.image]), 0)
+        batch_tensor_dict.append(tensor_dict)
+      self._batch_tensor_dict = batch_tensor_dict
+      flattened_batch_tensor_dict = tf.contrib.framework.nest.flatten(
+          batch_tensor_dict)
+      self._prefetch_queue = tf.FIFOQueue(
+          prefetch_queue_capacity,
+          [tensor.dtype for tensor in flattened_batch_tensor_dict])
+      enqueue_op = self._prefetch_queue.enqueue(flattened_batch_tensor_dict)
+      tf.train.queue_runner.add_queue_runner(
+          tf.train.queue_runner.QueueRunner(
+              self._prefetch_queue, [enqueue_op] * num_batch_queue_threads))
+      tf.summary.scalar(
+          f'prefetch_queue/{self._prefetch_queue.name}/'
+          f'fraction_of_{prefetch_queue_capacity}_full',
+          tf.to_float(self._prefetch_queue.size()) / prefetch_queue_capacity)
 
-  include_instance_masks = (fields.InputDataFields.groundtruth_instance_masks
-                            in tensor_dict)
-  include_keypoints = (fields.InputDataFields.groundtruth_keypoints
-                       in tensor_dict)
-  include_multiclass_scores = (fields.InputDataFields.multiclass_scores
-                               in tensor_dict)
-  if data_augmentation_options:
-    tensor_dict = preprocessor.preprocess(
-        tensor_dict, data_augmentation_options,
-        func_arg_map=preprocessor.get_default_func_arg_map(
-            include_multiclass_scores=include_multiclass_scores,
-            include_instance_masks=include_instance_masks,
-            include_keypoints=include_keypoints))
+    def dequeue(self):
+      flattened_batch_tensor_dict = self._prefetch_queue.dequeue()
+      for dequeued_tensor, tensor in zip(flattened_batch_tensor_dict,
+                                         tf.contrib.framework.nest.flatten(
+                                             self._batch_tensor_dict)):
+        dequeued_tensor.set_shape(tensor.shape)
+      return tf.contrib.framework.nest.pack_sequence_as(
+          self._batch_tensor_dict, flattened_batch_tensor_dict)
 
-  input_queue = batcher.BatchQueue(
-      tensor_dict,
-      batch_size=batch_size_per_clone,
-      batch_queue_capacity=batch_queue_capacity,
-      num_batch_queue_threads=num_batch_queue_threads,
-      prefetch_queue_capacity=prefetch_queue_capacity)
-  return input_queue
+  return BatchQueue(tensor_dict_iterator, batch_size=batch_size_per_clone)
 
 
 def get_inputs(input_queue,
@@ -241,9 +242,6 @@ def train(create_tensor_dict_fn,
   """
 
   detection_model = create_model_fn()
-  data_augmentation_options = [
-      preprocessor_builder.build(step)
-      for step in train_config.data_augmentation_options]
 
   with tf.Graph().as_default():
     # Build a configuration specifying multi-GPU and multi-replicas.
@@ -271,7 +269,7 @@ def train(create_tensor_dict_fn,
           batch_size, create_tensor_dict_fn,
           train_config.batch_queue_capacity,
           train_config.num_batch_queue_threads,
-          train_config.prefetch_queue_capacity, data_augmentation_options)
+          train_config.prefetch_queue_capacity)
 
     # Gather initial summaries.
     # TODO(rathodv): See if summaries can be added/extracted from global tf
