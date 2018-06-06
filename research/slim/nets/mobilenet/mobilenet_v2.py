@@ -188,6 +188,6 @@ def training_scope(**kwargs):
 
 mobilenet_v2_035 = mobilenet_v1.wrapped_partial(mobilenet,
                                                 depth_multiplier=0.35)
-
+mobilenet_v2_140 = mobilenet_v1.wrapped_partial(mobilenet, depth_multiplier=1.4)
 
 __all__ = ['training_scope', 'mobilenet_base', 'mobilenet', 'V2_DEF']
