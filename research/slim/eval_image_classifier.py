@@ -79,6 +79,10 @@ tf.app.flags.DEFINE_float(
 tf.app.flags.DEFINE_integer(
     'eval_image_size', None, 'Eval image size')
 
+tf.app.flags.DEFINE_float(
+    'batch_norm_decay', None, ''
+)
+
 FLAGS = tf.app.flags.FLAGS
 
 
