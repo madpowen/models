@@ -176,19 +176,25 @@ def main(_):
       num_batches = math.ceil(dataset.num_samples / float(FLAGS.batch_size))
 
     if tf.gfile.IsDirectory(FLAGS.checkpoint_path):
-      checkpoint_path = tf.train.latest_checkpoint(FLAGS.checkpoint_path)
+      eval_fn = slim.evaluation.evaluation_loop
+      checkpoint_kwargs = {'checkpoint_dir': FLAGS.checkpoint_path}
     else:
-      checkpoint_path = FLAGS.checkpoint_path
+      eval_fn = slim.evaluation.evaluate_once
+      checkpoint_kwargs = {'checkpoint_path': FLAGS.checkpoint_path}
 
-    tf.logging.info('Evaluating %s' % checkpoint_path)
+    tf.logging.info('Evaluating %s' % FLAGS.checkpoint_path)
 
-    slim.evaluation.evaluate_once(
+    session_config = tf.ConfigProto()
+    session_config.gpu_options.allow_growth=True
+
+    eval_fn(
         master=FLAGS.master,
-        checkpoint_path=checkpoint_path,
         logdir=FLAGS.eval_dir,
         num_evals=num_batches,
         eval_op=list(names_to_updates.values()),
-        variables_to_restore=variables_to_restore)
+        variables_to_restore=variables_to_restore,
+        session_config=session_config,
+        **checkpoint_kwargs)
 
 
 if __name__ == '__main__':
