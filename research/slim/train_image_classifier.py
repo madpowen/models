@@ -282,7 +282,7 @@ def _configure_learning_rate(num_samples_per_epoch, global_step):
   elif FLAGS.learning_rate_decay_type == 'polynomial':
     return tf.train.polynomial_decay(FLAGS.learning_rate,
                                      global_step,
-                                     decay_steps,
+                                     FLAGS.max_number_of_steps,
                                      FLAGS.end_learning_rate,
                                      power=1.0,
                                      cycle=False,
