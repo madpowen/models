@@ -19,7 +19,9 @@ This file provides a generic training method that can be used to train a
 DetectionModel.
 """
 
+import collections
 import functools
+import re
 
 import tensorflow as tf
 
@@ -339,6 +341,49 @@ def train(create_tensor_dict_fn,
       update_op = tf.group(*update_ops, name='update_barrier')
       with tf.control_dependencies([update_op]):
         train_tensor = tf.identity(total_loss, name='train_op')
+
+      if graph_hook_fn:
+        act_quant_min_variables, act_quant_max_variables = (
+          [v for v in tf.global_variables() if re.match(pattern, v.op.name)]
+          for pattern in [r'.*/act_quant/min$', r'.*/act_quant/max$'])
+        assert all(re.match(r'^clone_\d+/', v.op.name)
+                   for v in act_quant_min_variables + act_quant_max_variables)
+
+        def get_stripped_name_to_variables(variables, min_or_max):
+          pattern = {
+            'min': r'^clone_\d+/(.+)/min$',
+            'max': r'^clone_\d+/(.+)/max$'
+          }[min_or_max]
+          stripped_name_to_variables = collections.defaultdict(list)
+          for v in variables:
+            match = re.match(pattern, v.op.name)
+            stripped_name_to_variables[match.group(1)].append(v)
+          assert all(len(vs) == num_clones
+                     for vs in stripped_name_to_variables.values())
+          assert (sum(len(vs) for vs in stripped_name_to_variables.values()) ==
+                  len(variables))
+          return stripped_name_to_variables
+
+        name_to_min_variables = get_stripped_name_to_variables(
+            act_quant_min_variables, 'min')
+        name_to_max_variables = get_stripped_name_to_variables(
+            act_quant_max_variables, 'max')
+        assert name_to_min_variables.keys() == name_to_max_variables.keys()
+
+        def reduce(variables, reduce_fn):
+          assert all(v.shape == [] for v in variables)
+          reduced_value = reduce_fn([v.read_value() for v in variables])
+          return [tf.assign(v, reduced_value) for v in variables]
+
+        # TODO: update immediately
+        with tf.control_dependencies([train_tensor]):
+          reduce_ops = []
+          for min_variables in name_to_min_variables.values():
+            reduce_ops.extend(reduce(min_variables, tf.reduce_min))
+          for max_variables in name_to_max_variables.values():
+            reduce_ops.extend(reduce(max_variables, tf.reduce_max))
+        with tf.control_dependencies(reduce_ops):
+          train_tensor = tf.identity(train_tensor)
 
     # Add summaries.
     for model_var in slim.get_model_variables():
