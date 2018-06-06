@@ -237,6 +237,18 @@ tf.app.flags.DEFINE_float(
     'batch_norm_decay', None, ''
 )
 
+tf.app.flags.DEFINE_string(
+    'teacher_model_name', None, ''
+)
+
+tf.app.flags.DEFINE_string(
+    'teacher_preprocessing_name', None, ''
+)
+
+tf.app.flags.DEFINE_string(
+    'teacher_checkpoint_path', None, ''
+)
+
 FLAGS = tf.app.flags.FLAGS
 
 
@@ -433,6 +445,31 @@ def main(_):
         is_training=True,
         batch_norm_decay=FLAGS.batch_norm_decay)
 
+    train_image_size = FLAGS.train_image_size or network_fn.default_image_size
+    if FLAGS.teacher_model_name:
+      with tf.Graph().as_default() as teacher_graph:
+        teacher_network_fn = nets_factory.get_network_fn(
+            FLAGS.teacher_model_name,
+            num_classes=dataset.num_classes - FLAGS.labels_offset,
+            is_training=False)
+        teacher_input_images = tf.placeholder(
+            tf.float32, shape=[FLAGS.batch_size, train_image_size,
+                               train_image_size, 3])
+        teacher_logits, _ = teacher_network_fn(teacher_input_images)
+        teacher_predictions = tf.nn.softmax(teacher_logits)
+        teacher_saver = tf.train.Saver()
+        session_config = tf.ConfigProto()
+        session_config.gpu_options.allow_growth=True
+        with tf.Session(config=session_config) as sess:
+          teacher_saver.restore(sess, FLAGS.teacher_checkpoint_path)
+          teacher_graph_def = tf.graph_util.convert_variables_to_constants(
+              sess, teacher_graph.as_graph_def(),
+              [teacher_predictions.op.name])
+    else:
+      teacher_graph_def = None
+      teacher_input_images = None
+      teacher_predictions = None
+
     #####################################
     # Select the preprocessing function #
     #####################################
@@ -453,8 +490,6 @@ def main(_):
       [image, label] = provider.get(['image', 'label'])
       label -= FLAGS.labels_offset
 
-      train_image_size = FLAGS.train_image_size or network_fn.default_image_size
-
       image = image_preprocessing_fn(image, train_image_size, train_image_size,
                                      fast_mode=FLAGS.preprocessing_fast_mode)
 
@@ -474,7 +509,17 @@ def main(_):
     def clone_fn(batch_queue):
       """Allows data parallelism by creating multiple clones of network_fn."""
       images, labels = batch_queue.dequeue()
+
       logits, end_points = network_fn(images)
+
+      if teacher_graph_def is not None:
+        # TODO: teacher_preprocessing_name may be different with
+        # preprocessing_name
+        assert FLAGS.teacher_preprocessing_name == FLAGS.preprocessing_name
+        labels, = tf.import_graph_def(
+            teacher_graph_def, input_map={teacher_input_images.name: images},
+            return_elements=[teacher_predictions.name], name='teacher')
+        assert not FLAGS.label_smoothing
 
       #############################
       # Specify the loss function #
@@ -575,6 +620,10 @@ def main(_):
     ###########################
     # Kicks off the training. #
     ###########################
+
+    session_config = tf.ConfigProto()
+    session_config.gpu_options.allow_growth=True
+
     slim.learning.train(
         train_tensor,
         logdir=FLAGS.train_dir,
@@ -586,7 +635,8 @@ def main(_):
         log_every_n_steps=FLAGS.log_every_n_steps,
         save_summaries_secs=FLAGS.save_summaries_secs,
         save_interval_secs=FLAGS.save_interval_secs,
-        sync_optimizer=optimizer if FLAGS.sync_replicas else None)
+        sync_optimizer=optimizer if FLAGS.sync_replicas else None,
+        session_config=session_config)
 
 
 if __name__ == '__main__':
