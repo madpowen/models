@@ -24,6 +24,7 @@ import functools
 import re
 
 import tensorflow as tf
+from tensorflow.python.client import device_lib
 
 from object_detection.builders import optimizer_builder
 from object_detection.core import standard_fields as fields
@@ -247,7 +248,34 @@ def train(create_tensor_dict_fn,
 
   with tf.Graph().as_default():
     # Build a configuration specifying multi-GPU and multi-replicas.
-    deploy_config = model_deploy.DeploymentConfig(
+    class RoundRobinDeploymentConfig(model_deploy.DeploymentConfig):
+
+      def __init__(self, num_clones=1, clone_on_cpu=False,
+                   replica_id=0, num_replicas=1, num_ps_tasks=0,
+                   worker_job_name='worker', ps_job_name='ps'):
+        super().__init__(num_clones, clone_on_cpu, replica_id, num_replicas,
+                         num_ps_tasks, worker_job_name, ps_job_name)
+        session_config = tf.ConfigProto()
+        session_config.gpu_options.allow_growth = True
+        local_device_protos = device_lib.list_local_devices(
+            session_config=session_config)
+        self._num_gpu_devices = len(
+            list(p.name for p in local_device_protos if p.device_type == 'GPU'))
+
+      def clone_device(self, clone_index):
+        if clone_index >= self._num_clones:
+          raise ValueError('clone_index must be less than num_clones')
+        device = ''
+        if self._num_ps_tasks > 0:
+          device += self._worker_device
+        if self._clone_on_cpu:
+          device += '/device:CPU:0'
+        else:
+          clone_index %= self._num_gpu_devices or 1
+          device += '/device:GPU:%d' % clone_index
+        return device
+
+    deploy_config = RoundRobinDeploymentConfig(
         num_clones=num_clones,
         clone_on_cpu=clone_on_cpu,
         replica_id=task,
