@@ -17,6 +17,8 @@
 from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
+
+import contextlib
 import functools
 
 import tensorflow as tf
@@ -33,6 +35,8 @@ from nets import vgg
 from nets.mobilenet import mobilenet_v2
 from nets.nasnet import nasnet
 from nets.nasnet import pnasnet
+
+from nets import mynet
 
 slim = tf.contrib.slim
 
@@ -61,11 +65,15 @@ networks_map = {'alexnet_v2': alexnet.alexnet_v2,
                 'mobilenet_v1_050': mobilenet_v1.mobilenet_v1_050,
                 'mobilenet_v1_025': mobilenet_v1.mobilenet_v1_025,
                 'mobilenet_v2': mobilenet_v2.mobilenet,
+                'mobilenet_v2_035': mobilenet_v2.mobilenet_v2_035,
+                'mobilenet_v2_140': mobilenet_v2.mobilenet_v2_140,
+                'mobilenet_v1': mobilenet_v1.mobilenet_v1,
                 'nasnet_cifar': nasnet.build_nasnet_cifar,
                 'nasnet_mobile': nasnet.build_nasnet_mobile,
                 'nasnet_large': nasnet.build_nasnet_large,
                 'pnasnet_large': pnasnet.build_pnasnet_large,
-               }
+                'mynet': mynet.mynet
+                }
 
 arg_scopes_map = {'alexnet_v2': alexnet.alexnet_v2_arg_scope,
                   'cifarnet': cifarnet.cifarnet_arg_scope,
@@ -93,14 +101,18 @@ arg_scopes_map = {'alexnet_v2': alexnet.alexnet_v2_arg_scope,
                   'mobilenet_v1_050': mobilenet_v1.mobilenet_v1_arg_scope,
                   'mobilenet_v1_025': mobilenet_v1.mobilenet_v1_arg_scope,
                   'mobilenet_v2': mobilenet_v2.training_scope,
+                  'mobilenet_v2_035': mobilenet_v2.training_scope,
+                  'mobilenet_v2_140': mobilenet_v2.training_scope,
                   'nasnet_cifar': nasnet.nasnet_cifar_arg_scope,
                   'nasnet_mobile': nasnet.nasnet_mobile_arg_scope,
                   'nasnet_large': nasnet.nasnet_large_arg_scope,
                   'pnasnet_large': pnasnet.pnasnet_large_arg_scope,
-                 }
+                  'mynet': mynet.mynet_arg_scope,
+                  }
 
 
-def get_network_fn(name, num_classes, weight_decay=0.0, is_training=False):
+def get_network_fn(name, num_classes, weight_decay=0.0, is_training=False,
+                   batch_norm_decay=None):
   """Returns a network_fn such as `logits, end_points = network_fn(images)`.
 
   Args:
@@ -137,7 +149,11 @@ def get_network_fn(name, num_classes, weight_decay=0.0, is_training=False):
   @functools.wraps(func)
   def network_fn(images, **kwargs):
     arg_scope = arg_scopes_map[name](weight_decay=weight_decay)
-    with slim.arg_scope(arg_scope):
+    with contextlib.ExitStack() as stack:
+      stack.enter_context(slim.arg_scope(arg_scope))
+      if batch_norm_decay is not None:
+        stack.enter_context(slim.arg_scope([slim.batch_norm],
+                                           decay=batch_norm_decay))
       return func(images, num_classes, is_training=is_training, **kwargs)
   if hasattr(func, 'default_image_size'):
     network_fn.default_image_size = func.default_image_size
