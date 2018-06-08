@@ -32,6 +32,7 @@ from object_detection.models import faster_rcnn_inception_v2_feature_extractor a
 from object_detection.models import faster_rcnn_nas_feature_extractor as frcnn_nas
 from object_detection.models import faster_rcnn_pnas_feature_extractor as frcnn_pnas
 from object_detection.models import faster_rcnn_resnet_v1_feature_extractor as frcnn_resnet_v1
+from object_detection.models import my_feature_extractor
 from object_detection.models import ssd_resnet_v1_fpn_feature_extractor as ssd_resnet_v1_fpn
 from object_detection.models.embedded_ssd_mobilenet_v1_feature_extractor import EmbeddedSSDMobileNetV1FeatureExtractor
 from object_detection.models.ssd_inception_v2_feature_extractor import SSDInceptionV2FeatureExtractor
@@ -50,6 +51,7 @@ SSD_FEATURE_EXTRACTOR_CLASS_MAP = {
     'ssd_resnet101_v1_fpn': ssd_resnet_v1_fpn.SSDResnet101V1FpnFeatureExtractor,
     'ssd_resnet152_v1_fpn': ssd_resnet_v1_fpn.SSDResnet152V1FpnFeatureExtractor,
     'embedded_ssd_mobilenet_v1': EmbeddedSSDMobileNetV1FeatureExtractor,
+    'MyFeatureExtractor': my_feature_extractor.MyFeatureExtractor
 }
 
 # A map of names to Faster R-CNN feature extractors.
