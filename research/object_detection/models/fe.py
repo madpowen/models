@@ -290,7 +290,7 @@ class FESSDLite(FE):
       feature_maps = feature_map_generators.multi_resolution_feature_maps(
           feature_map_layout=feature_map_layout,
           depth_multiplier=0.25,
-          min_depth=12345,
+          min_depth=0,
           insert_1x1_conv=True,
           image_features=image_features)
 
@@ -313,7 +313,7 @@ class FESSDLitePen32(FE):
       feature_maps = feature_map_generators.multi_resolution_feature_maps(
           feature_map_layout=feature_map_layout,
           depth_multiplier=0.25,
-          min_depth=12345,
+          min_depth=0,
           insert_1x1_conv=True,
           image_features=image_features)
 
@@ -336,7 +336,7 @@ class FESSDLiteConcat32(FE):
       feature_maps = feature_map_generators.multi_resolution_feature_maps(
           feature_map_layout=feature_map_layout,
           depth_multiplier=0.25,
-          min_depth=12345,
+          min_depth=0,
           insert_1x1_conv=True,
           image_features=image_features)
 
@@ -384,10 +384,10 @@ class FEWiderShallowerConcat32Add(FE):
     feature_map_64 = slim.separable_conv2d(
         slim.conv2d(image_features['concat_stride32'], 192, 1), None, 3, 1,
         stride=2)
-    feature_map_32 = slim.conv2d(image_features['concat_stride32'], 256, 1)
-    feature_map_16 = (image_features['last_stride16'] +
+    feature_map_32 = slim.conv2d(image_features['concat_stride32'], 128, 1)
+    feature_map_16 = (slim.conv2d(image_features['last_stride16'], 128, 1) +
                       resize_neareast_neighbor_nhwc_using_tile(
-                          slim.conv2d(feature_map_32, 128, 1)))
+                          feature_map_32))
 
     layer16 = slim.conv2d(feature_map_16, 128, 1)
     layer16_c = slim.separable_conv2d(layer16, None, 3, 1)
