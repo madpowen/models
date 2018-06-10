@@ -69,6 +69,10 @@ SSD_FEATURE_EXTRACTOR_CLASS_MAP = {
     'FESSDLiteMore': fe.FESSDLiteMore,
     'FESSDLiteBot8': fe.FESSDLiteBot8,
     'FESSDLiteBot16': fe.FESSDLiteBot16,
+    'FESSDLiteBot16Thin3264': fe.FESSDLiteBot16Thin3264,
+    'FESSDLiteBot16Max64': fe.FESSDLiteBot16Max64,
+    'FESSDLiteBot16Max64Back64': fe.FESSDLiteBot16Max64Back64,
+    'FESSDLiteBot16Max64Top96': fe.FESSDLiteBot16Max64Top96,
 }
 
 # A map of names to Faster R-CNN feature extractors.
