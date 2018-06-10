@@ -64,6 +64,11 @@ SSD_FEATURE_EXTRACTOR_CLASS_MAP = {
     'FEWiderShallowerConcat32': fe.FEWiderShallowerConcat32,
     'FEWiderShallowerConcat32Add': fe.FEWiderShallowerConcat32Add,
     'FEWiderShallowerConcat32Squeeze': fe.FEWiderShallowerConcat32Squeeze,
+    'FESSDLiteDepth': fe.FESSDLiteDepth,
+    'FESSDLiteDepth2': fe.FESSDLiteDepth2,
+    'FESSDLiteMore': fe.FESSDLiteMore,
+    'FESSDLiteBot8': fe.FESSDLiteBot8,
+    'FESSDLiteBot16': fe.FESSDLiteBot16,
 }
 
 # A map of names to Faster R-CNN feature extractors.

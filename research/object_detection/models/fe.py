@@ -34,6 +34,23 @@ class FE(ssd_meta_arch.SSDFeatureExtractor):
               ops.pad_to_multiple(preprocessed_inputs, self._pad_to_multiple),
               scope=scope)
     with slim.arg_scope(self._conv_hyperparams_fn()):
+      with tf.Graph().as_default() as g:
+        with slim.arg_scope([slim.conv2d, slim.separable_conv2d], normalizer_fn=None) as scope:
+          tmp_image_features = {
+              k: tf.placeholder(v.dtype, shape=[1] + v.shape[1:].as_list())
+              for k, v in image_features.items()
+          }
+          orig = self._conv_hyperparams_fn
+          self._conv_hyperparams_fn = lambda: scope
+          tmp_feature_maps = list(self._generate_feature_maps(tmp_image_features))
+          # tmp_feature_maps = [tf.identity(t) for t in tmp_feature_maps]
+          self._conv_hyperparams_fn = orig
+          print(
+              'FLOPS',
+              tf.profiler.profile(
+                  g, options=tf.profiler.ProfileOptionBuilder.float_operation()
+              ).total_float_ops / 10 ** 6
+          )
       return self._generate_feature_maps(image_features)
 
   def _generate_feature_maps(self, image_features):
@@ -446,3 +463,166 @@ class FEWiderShallowerConcat32Squeeze(FE):
     layer64 = slim.separable_conv2d(layer64, None, 3, 1)
 
     return [layer16, layer32, layer32, layer64, layer64]
+
+
+class FESSDLiteDepth(FE):
+
+  def _generate_feature_maps(self, image_features):
+    feature_map_16 = image_features['last_stride16']
+    feature_map_32 = image_features['last_stride32']
+
+    feature_map_64 = slim.conv2d(feature_map_32, 64, 1)
+    feature_map_64 = slim.separable_conv2d(feature_map_64, None, 3, 1, stride=2)
+    feature_map_64 = slim.conv2d(feature_map_64, 128, 1)
+
+    feature_map_128 = slim.conv2d(feature_map_64, 32, 1)
+    feature_map_128 = slim.separable_conv2d(feature_map_128, None, 3, 1,
+                                            stride=2)
+    feature_map_128 = slim.conv2d(feature_map_128, 64, 1)
+
+    feature_map_256 = slim.conv2d(feature_map_128, 32, 1)
+    feature_map_256 = slim.separable_conv2d(feature_map_256, None, 2, 1,
+                                            stride=2)
+    feature_map_256 = slim.conv2d(feature_map_256, 64, 1)
+
+    return [feature_map_16, feature_map_32, feature_map_64, feature_map_128,
+            feature_map_256]
+
+
+class FESSDLiteDepth2(FE):
+
+  def _generate_feature_maps(self, image_features):
+    feature_map_16 = image_features['last_stride16']
+    feature_map_32 = image_features['last_stride32']
+
+    feature_map_64 = slim.conv2d(feature_map_32, 128, 1)
+    feature_map_64 = slim.separable_conv2d(feature_map_64, None, 3, 1, stride=2)
+    feature_map_64 = slim.conv2d(feature_map_64, 256, 1)
+
+    feature_map_128 = slim.conv2d(feature_map_64, 64, 1)
+    feature_map_128 = slim.separable_conv2d(feature_map_128, None, 3, 1,
+                                            stride=2)
+    feature_map_128 = slim.conv2d(feature_map_128, 128, 1)
+
+    feature_map_256 = slim.conv2d(feature_map_128, 64, 1)
+    feature_map_256 = slim.separable_conv2d(feature_map_256, None, 2, 1,
+                                            stride=2)
+    feature_map_256 = slim.conv2d(feature_map_256, 128, 1)
+
+    return [feature_map_16, feature_map_32, feature_map_64, feature_map_128,
+            feature_map_256]
+
+
+class FESSDLiteMore(FE):
+
+  def _generate_feature_maps(self, image_features):
+    feature_map_16 = image_features['last_stride16']
+    feature_map_32 = image_features['last_stride32']
+
+    tmp_feature_map_16 = slim.separable_conv2d(feature_map_16, None, 3, 1)
+    tmp_feature_map_16 = slim.conv2d(tmp_feature_map_16, 128, 1)
+
+    tmp_feature_map_32 = slim.separable_conv2d(feature_map_32, None, 3, 1)
+    tmp_feature_map_32 = slim.conv2d(tmp_feature_map_32, 64, 1)
+    tmp_feature_map_32 = slim.separable_conv2d(tmp_feature_map_32, None, 3, 1)
+    tmp_feature_map_32 = slim.conv2d(tmp_feature_map_32, 128, 1)
+
+    feature_map_64 = slim.conv2d(feature_map_32, 64, 1)
+    feature_map_64 = slim.separable_conv2d(feature_map_64, None, 3, 1, stride=2)
+    feature_map_64 = slim.conv2d(feature_map_64, 128, 1)
+
+    feature_map_128 = slim.conv2d(feature_map_64, 32, 1)
+    feature_map_128 = slim.separable_conv2d(feature_map_128, None, 3, 1,
+                                            stride=2)
+    feature_map_128 = slim.conv2d(feature_map_128, 64, 1)
+
+    feature_map_256 = slim.conv2d(feature_map_128, 32, 1)
+    feature_map_256 = slim.separable_conv2d(feature_map_256, None, 2, 1,
+                                            stride=2)
+    feature_map_256 = slim.conv2d(feature_map_256, 64, 1)
+
+    return [tmp_feature_map_16, tmp_feature_map_32, feature_map_64,
+            feature_map_128, feature_map_256]
+
+
+class FESSDLiteBot16(FE):
+
+  def _generate_feature_maps(self, image_features):
+    feature_map_16 = image_features['last_stride16']
+    feature_map_32 = image_features['last_stride32']
+
+    net = slim.conv2d(feature_map_32, 64, 1)
+    net = resize_neareast_neighbor_nhwc_using_tile(net)
+    net = tf.concat([net, feature_map_16], 3)
+    net = slim.conv2d(net, 64, 1)
+    feature_map_16 = slim.separable_conv2d(net, None, 3, 1)
+    feature_map_16 = slim.conv2d(feature_map_16, 128, 1)
+
+    net = slim.conv2d(net, 128, 1)
+    net = slim.separable_conv2d(net, None, 3, 1, stride=2)
+    feature_map_32 = slim.conv2d(net, 128, 1)
+    feature_map_32 = slim.separable_conv2d(feature_map_32, None, 3, 1)
+    feature_map_32 = slim.conv2d(feature_map_32, 128, 1)
+
+    net = slim.conv2d(net, 128, 1)
+    net = slim.separable_conv2d(net, None, 3, 1, stride=2)
+    feature_map_64 = slim.conv2d(net, 128, 1)
+    feature_map_64 = slim.separable_conv2d(feature_map_64, None, 3, 1)
+    feature_map_64 = slim.conv2d(feature_map_64, 128, 1)
+
+    net = slim.conv2d(net, 128, 1)
+    net = slim.separable_conv2d(net, None, 3, 1, stride=2)
+    feature_map_128 = slim.conv2d(net, 64, 1)
+    feature_map_128 = slim.separable_conv2d(feature_map_128, None, 3, 1)
+    feature_map_128 = slim.conv2d(feature_map_128, 64, 1)
+
+    net = slim.conv2d(net, 64, 1)
+    net = slim.separable_conv2d(net, None, 3, 1, stride=2)
+    feature_map_256 = slim.conv2d(net, 64, 1)
+
+    return [feature_map_16, feature_map_32, feature_map_64, feature_map_128,
+            feature_map_256]
+
+
+class FESSDLiteBot8(FE):
+
+  def _generate_feature_maps(self, image_features):
+    feature_map_8 = image_features['last_stride8']
+    feature_map_16 = image_features['last_stride16']
+    feature_map_32 = image_features['last_stride32']
+
+    net = slim.conv2d(feature_map_32, 64, 1)
+    net = resize_neareast_neighbor_nhwc_using_tile(net)
+    net = tf.concat([net, feature_map_16], 3)
+    net = slim.conv2d(net, 64, 1)
+    net = resize_neareast_neighbor_nhwc_using_tile(net)
+    net = tf.concat([net, feature_map_8], 3)
+    net = slim.conv2d(net, 64, 1)
+    net = slim.separable_conv2d(net, None, 3, 1, stride=2)
+    feature_map_16 = slim.separable_conv2d(net, None, 3, 1)
+    feature_map_16 = slim.conv2d(feature_map_16, 128, 1)
+
+    net = slim.conv2d(net, 128, 1)
+    net = slim.separable_conv2d(net, None, 3, 1, stride=2)
+    feature_map_32 = slim.conv2d(net, 128, 1)
+    feature_map_32 = slim.separable_conv2d(feature_map_32, None, 3, 1)
+    feature_map_32 = slim.conv2d(feature_map_32, 128, 1)
+
+    net = slim.conv2d(net, 128, 1)
+    net = slim.separable_conv2d(net, None, 3, 1, stride=2)
+    feature_map_64 = slim.conv2d(net, 128, 1)
+    feature_map_64 = slim.separable_conv2d(feature_map_64, None, 3, 1)
+    feature_map_64 = slim.conv2d(feature_map_64, 128, 1)
+
+    net = slim.conv2d(net, 128, 1)
+    net = slim.separable_conv2d(net, None, 3, 1, stride=2)
+    feature_map_128 = slim.conv2d(net, 64, 1)
+    feature_map_128 = slim.separable_conv2d(feature_map_128, None, 3, 1)
+    feature_map_128 = slim.conv2d(feature_map_128, 64, 1)
+
+    net = slim.conv2d(net, 64, 1)
+    net = slim.separable_conv2d(net, None, 3, 1, stride=2)
+    feature_map_256 = slim.conv2d(net, 64, 1)
+
+    return [feature_map_16, feature_map_32, feature_map_64, feature_map_128,
+            feature_map_256]
