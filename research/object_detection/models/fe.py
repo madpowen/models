@@ -588,17 +588,15 @@ class FESSDLiteBot8(FE):
 
   def _generate_feature_maps(self, image_features):
     feature_map_8 = image_features['last_stride8']
+    feature_map_8 = slim.separable_conv2d(feature_map_8, None, 3, 1, stride=2)
+    feature_map_8 = slim.conv2d(feature_map_8, 32, 1)
     feature_map_16 = image_features['last_stride16']
+    feature_map_16 = slim.conv2d(feature_map_16, 32, 1)
     feature_map_32 = image_features['last_stride32']
 
     net = slim.conv2d(feature_map_32, 64, 1)
     net = resize_neareast_neighbor_nhwc_using_tile(net)
-    net = tf.concat([net, feature_map_16], 3)
-    net = slim.conv2d(net, 64, 1)
-    net = resize_neareast_neighbor_nhwc_using_tile(net)
-    net = tf.concat([net, feature_map_8], 3)
-    net = slim.conv2d(net, 64, 1)
-    net = slim.separable_conv2d(net, None, 3, 1, stride=2)
+    net = tf.concat([net, feature_map_16, feature_map_8], 3)
     feature_map_16 = slim.separable_conv2d(net, None, 3, 1)
     feature_map_16 = slim.conv2d(feature_map_16, 128, 1)
 
@@ -614,7 +612,7 @@ class FESSDLiteBot8(FE):
     feature_map_64 = slim.separable_conv2d(feature_map_64, None, 3, 1)
     feature_map_64 = slim.conv2d(feature_map_64, 128, 1)
 
-    net = slim.conv2d(net, 128, 1)
+    net = slim.conv2d(net, 64, 1)
     net = slim.separable_conv2d(net, None, 3, 1, stride=2)
     feature_map_128 = slim.conv2d(net, 64, 1)
     feature_map_128 = slim.separable_conv2d(feature_map_128, None, 3, 1)
