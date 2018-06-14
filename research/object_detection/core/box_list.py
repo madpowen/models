@@ -166,7 +166,7 @@ class BoxList(object):
     """
     with tf.name_scope(scope, 'get_center_coordinates_and_sizes'):
       box_corners = self.get()
-      ymin, xmin, ymax, xmax = tf.unstack(tf.transpose(box_corners))
+      ymin, xmin, ymax, xmax = tf.unstack(box_corners, axis=1)
       width = xmax - xmin
       height = ymax - ymin
       ycenter = ymin + height / 2.
