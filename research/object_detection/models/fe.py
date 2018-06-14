@@ -4,6 +4,7 @@ from object_detection.meta_architectures import ssd_meta_arch
 from object_detection.models import feature_map_generators
 from object_detection.utils import context_manager
 from object_detection.utils import ops
+from nets import mobilenet_v1
 from nets import mynet
 
 slim = tf.contrib.slim
@@ -750,3 +751,77 @@ class FESSDLiteBot16Max64Back64(FE):
 
     return [feature_map_16, feature_map_32, feature_map_64, feature_map_64,
             feature_map_64]
+
+
+class FESSDLiteBot16Mob(FESSDLiteBot16):
+
+  def extract_features(self, preprocessed_inputs):
+    with tf.variable_scope('MobilenetV1',
+                           reuse=self._reuse_weights) as scope:
+      with slim.arg_scope(
+          mobilenet_v1.mobilenet_v1_arg_scope(is_training=None)):
+        with (slim.arg_scope(self._conv_hyperparams_fn())
+              if self._override_base_feature_extractor_hyperparams
+              else context_manager.IdentityContextManager()):
+          _, image_features = mobilenet_v1.mobilenet_v1_base(
+              ops.pad_to_multiple(preprocessed_inputs, self._pad_to_multiple),
+              final_endpoint='Conv2d_13_pointwise',
+              min_depth=self._min_depth,
+              depth_multiplier=self._depth_multiplier,
+              use_explicit_padding=self._use_explicit_padding,
+              scope=scope)
+    with slim.arg_scope(self._conv_hyperparams_fn()):
+      with tf.Graph().as_default() as g:
+        with slim.arg_scope([slim.conv2d, slim.separable_conv2d], normalizer_fn=None) as scope:
+          tmp_image_features = {
+              k: tf.placeholder(v.dtype, shape=[1] + v.shape[1:].as_list())
+              for k, v in image_features.items()
+          }
+          orig = self._conv_hyperparams_fn
+          self._conv_hyperparams_fn = lambda: scope
+          tmp_feature_maps = list(self._generate_feature_maps(tmp_image_features))
+          # tmp_feature_maps = [tf.identity(t) for t in tmp_feature_maps]
+          self._conv_hyperparams_fn = orig
+          print(
+              'FLOPS',
+              tf.profiler.profile(
+                  g, options=tf.profiler.ProfileOptionBuilder.float_operation()
+              ).total_float_ops / 10 ** 6
+          )
+      return self._generate_feature_maps(image_features)
+
+  def _generate_feature_maps(self, image_features):
+    feature_map_16 = image_features['Conv2d_11_pointwise']
+    feature_map_32 = image_features['Conv2d_13_pointwise']
+
+    net = slim.conv2d(feature_map_32, 64, 1)
+    net = resize_neareast_neighbor_nhwc_using_tile(net)
+    net = tf.concat([net, feature_map_16], 3)
+    net = slim.conv2d(net, 64, 1)
+    feature_map_16 = slim.separable_conv2d(net, None, 3, 1)
+    feature_map_16 = slim.conv2d(feature_map_16, 128, 1)
+
+    net = slim.conv2d(net, 128, 1)
+    net = slim.separable_conv2d(net, None, 3, 1, stride=2)
+    feature_map_32 = slim.conv2d(net, 128, 1)
+    feature_map_32 = slim.separable_conv2d(feature_map_32, None, 3, 1)
+    feature_map_32 = slim.conv2d(feature_map_32, 128, 1)
+
+    net = slim.conv2d(net, 128, 1)
+    net = slim.separable_conv2d(net, None, 3, 1, stride=2)
+    feature_map_64 = slim.conv2d(net, 128, 1)
+    feature_map_64 = slim.separable_conv2d(feature_map_64, None, 3, 1)
+    feature_map_64 = slim.conv2d(feature_map_64, 128, 1)
+
+    net = slim.conv2d(net, 128, 1)
+    net = slim.separable_conv2d(net, None, 3, 1, stride=2)
+    feature_map_128 = slim.conv2d(net, 64, 1)
+    feature_map_128 = slim.separable_conv2d(feature_map_128, None, 3, 1)
+    feature_map_128 = slim.conv2d(feature_map_128, 64, 1)
+
+    net = slim.conv2d(net, 64, 1)
+    net = slim.separable_conv2d(net, None, 3, 1, stride=2)
+    feature_map_256 = slim.conv2d(net, 64, 1)
+
+    return [feature_map_16, feature_map_32, feature_map_64, feature_map_128,
+            feature_map_256]

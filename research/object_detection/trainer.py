@@ -375,7 +375,7 @@ def train(create_tensor_dict_fn,
           [v for v in tf.global_variables() if re.match(pattern, v.op.name)]
           for pattern in [r'.*/act_quant/min$', r'.*/act_quant/max$'])
         assert all(re.match(r'^clone_\d+/', v.op.name)
-                   for v in act_quant_min_variables + act_quant_max_variables)
+                   for v in act_quant_min_variables + act_quant_max_variables), act_quant_min_variables
 
         def get_stripped_name_to_variables(variables, min_or_max):
           pattern = {
