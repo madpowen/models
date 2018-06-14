@@ -256,16 +256,8 @@ def evaluate(create_input_dict_fn, create_model_fn, eval_config, categories,
     if latest_checkpoint:
       break
     time.sleep(5)
-  reader = pywrap_tensorflow.NewCheckpointReader(latest_checkpoint)
-  checkpoint_variable_to_dtype_map = reader.get_variable_to_dtype_map()
-  var_dict = {}
-  for variable in variables_to_restore:
-    checkpoint_variable_name = variable.op.name
-    if checkpoint_variable_name not in checkpoint_variable_to_dtype_map:
-      checkpoint_variable_name = f'clone_0/{checkpoint_variable_name}'
-    var_dict[checkpoint_variable_name] = variable
 
-  saver = tf.train.Saver(var_dict)
+  saver = tf.train.Saver(variables_to_restore)
 
   def _restore_latest_checkpoint(sess):
     latest_checkpoint = tf.train.latest_checkpoint(checkpoint_dir)

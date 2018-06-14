@@ -275,6 +275,13 @@ def train(create_tensor_dict_fn,
           device += '/device:GPU:%d' % clone_index
         return device
 
+      def clone_scope(self, clone_index):
+        if clone_index >= self._num_clones:
+          raise ValueError('clone_index must be less than num_clones')
+        if clone_index == 0:
+          return ''
+        return 'clone_%d' % clone_index
+
     deploy_config = RoundRobinDeploymentConfig(
         num_clones=num_clones,
         clone_on_cpu=clone_on_cpu,
@@ -374,18 +381,16 @@ def train(create_tensor_dict_fn,
         act_quant_min_variables, act_quant_max_variables = (
           [v for v in tf.global_variables() if re.match(pattern, v.op.name)]
           for pattern in [r'.*/act_quant/min$', r'.*/act_quant/max$'])
-        assert all(re.match(r'^clone_\d+/', v.op.name)
-                   for v in act_quant_min_variables + act_quant_max_variables)
 
         def get_stripped_name_to_variables(variables, min_or_max):
           pattern = {
-            'min': r'^clone_\d+/(.+)/min$',
-            'max': r'^clone_\d+/(.+)/max$'
+            'min': r'^(clone_\d+/)?(.+)/min$',
+            'max': r'^(clone_\d+/)?(.+)/max$'
           }[min_or_max]
           stripped_name_to_variables = collections.defaultdict(list)
           for v in variables:
             match = re.match(pattern, v.op.name)
-            stripped_name_to_variables[match.group(1)].append(v)
+            stripped_name_to_variables[match.group(2)].append(v)
           assert all(len(vs) == num_clones
                      for vs in stripped_name_to_variables.values())
           assert (sum(len(vs) for vs in stripped_name_to_variables.values()) ==
